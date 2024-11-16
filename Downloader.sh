@@ -1,5 +1,121 @@
 #!/bin/bash
 
+set -euo pipefail
+IFS=$'\n\t'
+
+SCRIPT_NAME="Downloader"
+SCRIPT_VERSION="v0.2.8"
+SCRIPT_URL="https://raw.githubusercontent.com/ahmad02223/Test/main/Downloader.sh"
+
+declare -r -A COLORS=(
+    [RED]='\033[0;31m'
+    [GREEN]='\033[0;32m'
+    [YELLOW]='\033[0;33m'
+    [BLUE]='\033[0;34m'
+    [PURPLE]='\033[0;35m'
+    [CYAN]='\033[0;36m'
+    [RESET]='\033[0m'
+)
+
+log() { echo -e "${COLORS[BLUE]}[INFO]${COLORS[RESET]} $*"; }
+warn() { echo -e "${COLORS[YELLOW]}[WARN]${COLORS[RESET]} $*" >&2; }
+error() { echo -e "${COLORS[RED]}[ERROR]${COLORS[RESET]} $*" >&2; exit 1; }
+success() { echo -e "${COLORS[GREEN]}[SUCCESS]${COLORS[RESET]} $*"; }
+
+check_root() {
+    [[ $EUID -eq 0 ]] || error "This script must be run as root"
+}
+
+show_version() {
+    log "MarzNode Script Version: $SCRIPT_VERSION"
+}
+
+update_script() {
+    local script_path="/usr/local/bin/$SCRIPT_NAME"
+    
+    if [[ -f "$script_path" ]]; then
+        log "Updating the script..."
+        curl -o "$script_path" $SCRIPT_URL
+        chmod +x "$script_path"
+        success "Script updated to the latest version!"
+        echo "Current version: $SCRIPT_VERSION"
+    else
+        warn "Script is not installed. Use 'install-script' command to install the script first."
+    fi
+}
+
+manage_service() {
+    if ! is_installed; then
+        error "MarzNode is not installed. Please install it first."
+        return 1
+    fi
+
+    local action=$1
+    case "$action" in
+        start)
+            if is_running; then
+                warn "MarzNode is already running."
+            else
+                log "Starting MarzNode..."
+                docker-compose -f "$COMPOSE_FILE" up -d
+                success "MarzNode started"
+            fi
+            ;;
+        stop)
+            if ! is_running; then
+                warn "MarzNode is not running."
+            else
+                log "Stopping MarzNode..."
+                docker-compose -f "$COMPOSE_FILE" down
+                success "MarzNode stopped"
+            fi
+            ;;
+        restart)
+            log "Restarting MarzNode..."
+            docker-compose -f "$COMPOSE_FILE" down
+            docker-compose -f "$COMPOSE_FILE" up -d
+            success "MarzNode restarted"
+            ;;
+    esac
+}
+
+show_status() {
+    if ! is_installed; then
+        error "Status: Not Installed"
+        return 1
+    fi
+
+    if is_running; then
+        success "Status: Up and Running [uptime: $(docker ps --filter "name=marznode_marznode_1" --format "{{.Status}}")]"        
+    else
+        error "Status: Stopped"
+    fi
+}
+
+
+show_logs() {
+    log "Showing MarzNode logs (press Ctrl+C to exit):"
+    docker-compose -f "$COMPOSE_FILE" logs --tail=100 -f
+}
+
+install_script() {
+    local script_path="/usr/local/bin/$SCRIPT_NAME"
+    
+    curl -s -o "$script_path" $SCRIPT_URL
+    chmod +x "$script_path"
+    success "Script installed successfully. Script Version: $SCRIPT_VERSION. You can now use '$SCRIPT_NAME' command from anywhere."
+}
+
+uninstall_script() {
+    local script_path="/usr/local/bin/$SCRIPT_NAME"
+    if [[ -f "$script_path" ]]; then
+        rm "$script_path"
+        success "Script uninstalled successfully from $script_path"
+    else
+        warn "Script not found at $script_path. Nothing to uninstall."
+    fi
+}
+
 # تابعی برای نمایش منو
 show_menu() {
     echo "*********** MENU ***********"
